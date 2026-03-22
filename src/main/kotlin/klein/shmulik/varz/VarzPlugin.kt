@@ -14,6 +14,35 @@ val VarzMetricsKey = AttributeKey<VarzMetrics>("VarzMetrics")
 val VarzPlugin = createApplicationPlugin("Varz", ::VarzConfig) {
     val metrics = VarzMetrics()
     application.attributes.put(VarzMetricsKey, metrics)
+    
+    onCall { call ->
+        val startTime = System.nanoTime()
+        metrics.activeRequests.incrementAndGet()
+        val contentLength = try { call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull() } catch (e: Exception) { null }
+        val requestMethod = call.request.local.method.value
+        
+        call.attributes.put(AttributeKey<Long>("varzStartTime"), startTime)
+        call.attributes.put(AttributeKey<Long>("varzReqSize"), contentLength ?: 0L)
+        call.attributes.put(AttributeKey<String>("varzMethod"), requestMethod)
+    }
+    
+    onCallRespond { call ->
+        val startTime = call.attributes.getOrNull(AttributeKey<Long>("varzStartTime")) ?: return@onCallRespond
+        val requestMethod = call.attributes.getOrNull(AttributeKey<String>("varzMethod")) ?: "UNKNOWN"
+        val requestBytes = call.attributes.getOrNull(AttributeKey<Long>("varzReqSize")) ?: 0L
+        
+        val latencyNanos = System.nanoTime() - startTime
+        val status = call.response.status()?.value ?: 0
+        
+        metrics.recordRequest(
+            latencyNanos = latencyNanos,
+            status = status,
+            method = requestMethod,
+            requestBytes = requestBytes,
+            responseBytes = 0
+        )
+        metrics.activeRequests.decrementAndGet()
+    }
 }
 
 fun Routing.varz(config: VarzConfig = VarzConfig()) {
