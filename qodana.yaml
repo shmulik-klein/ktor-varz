@@ -8,3 +8,6 @@ profile:
   name: qodana.recommended
 include:
   - name: CheckDependencyLicenses
+inspections:
+  - inspection: VulnerableLibrariesLocal
+    enabled: true
